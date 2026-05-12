@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardio Monitoring Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #09090b;
+            --card-bg: #18181b;
+            --accent: #ef4444;
+            --accent-glow: rgba(239, 68, 68, 0.2);
+            --text-main: #fafafa;
+            --text-muted: #a1a1aa;
+            --border: #27272a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+        }
+
+        .badge {
+            background: #10b981;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.3;
+        }
+
+        .card-title {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .card-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+        }
+
+        .unit {
+            font-size: 1rem;
+            color: var(--text-muted);
+        }
+
+        .chart-container {
+            grid-column: span 2;
+            height: 400px;
+        }
+
+        @media (max-width: 900px) {
+            .chart-container {
+                grid-column: span 1;
+            }
+        }
+
+        .alerts-list {
+            list-style: none;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .alert-type {
+            font-weight: 600;
+            color: var(--accent);
+            text-transform: capitalize;
+        }
+
+        .alert-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: inline-block;
+            margin-right: 0.5rem;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Cardio Monitoring Dashboard</h1>
+            <div class="badge">LIVE TELEMETRY</div>
+        </header>
+
+        <div class="grid">
+            <div class="card">
+                <p class="card-title">Heart Rate</p>
+                <div class="card-value" id="heart-rate">-- <span class="unit">BPM</span></div>
+            </div>
+            <div class="card">
+                <p class="card-title">SpO2 Saturation</p>
+                <div class="card-value" id="spo2">-- <span class="unit">%</span></div>
+            </div>
+            <div class="card">
+                <p class="card-title">Stress Index (Numpy Analysis)</p>
+                <div class="card-value" id="stress-index" style="font-size: 1.5rem; color: #10b981;">--</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card chart-container">
+                <p class="card-title">Heart Rate Trend & HRV</p>
+                <canvas id="hrChart"></canvas>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted);">
+                    HRV: <span id="hrv-val" style="color: var(--text-main); font-weight: 600;">--</span> ms | 
+                    Signal Confidence: <span id="conf-val" style="color: var(--text-main); font-weight: 600;">--</span>%
+                </div>
+            </div>
+            <div class="card">
+                <p class="card-title">Latest Alerts</p>
+                <ul class="alerts-list" id="alerts-list">
+                    <!-- Alerts will appear here -->
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const patientId = 2; // Updated to match current simulation
+        const ctx = document.getElementById('hrChart').getContext('2d');
+        const hrChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Pulse (BPM)',
+                    data: [],
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { display: false },
+                    y: { 
+                        grid: { color: '#27272a' },
+                        ticks: { color: '#a1a1aa' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+
+        async function fetchData() {
+            try {
+                // Fetch latest telemetry
+                const telResponse = await fetch(`/telemetry/${patientId}`);
+                const telemetry = await telResponse.json();
+                
+                if (telemetry.length > 0) {
+                    const latest = telemetry[0];
+                    document.getElementById('heart-rate').innerHTML = `${latest.heart_rate} <span class="unit">BPM</span>`;
+                    document.getElementById('spo2').innerHTML = `${latest.spo2} <span class="unit">%</span>`;
+
+                    // Update Chart
+                    const chartData = telemetry.slice(0, 30).reverse();
+                    hrChart.data.labels = chartData.map(d => new Date(d.timestamp).toLocaleTimeString());
+                    hrChart.data.datasets[0].data = chartData.map(d => d.heart_rate);
+                    hrChart.update('none');
+                }
+
+                // Fetch Medical Insights (Seerlinq specific)
+                const insightResp = await fetch(`/telemetry/insights/${patientId}`);
+                const insight = await insightResp.json();
+                if (insight) {
+                    document.getElementById('stress-index').innerText = insight.stress_index;
+                    document.getElementById('stress-index').style.color = insight.stress_index === 'High Stress' ? '#ef4444' : '#10b981';
+                    document.getElementById('hrv-val').innerText = insight.hrv.toFixed(1);
+                    document.getElementById('conf-val').innerText = (insight.confidence_score * 100).toFixed(0);
+                }
+
+                // Fetch latest alerts
+                const alertResponse = await fetch('/alerts/');
+                const alerts = await alertResponse.json();
+                const alertList = document.getElementById('alerts-list');
+                alertList.innerHTML = '';
+                
+                alerts.slice(0, 10).forEach(alert => {
+                    const li = document.createElement('li');
+                    li.className = 'alert-item';
+                    const time = new Date(alert.created_at).toLocaleTimeString();
+                    li.innerHTML = `
+                        <div>
+                            <span class="status-dot"></span>
+                            <span class="alert-type">${alert.type}</span>
+                        </div>
+                        <span class="alert-time">${time}</span>
+                    `;
+                    alertList.appendChild(li);
+                });
+
+            } catch (err) {
+                console.error("Error fetching data:", err);
+            }
+        }
+
+        // Poll every 1 second
+        setInterval(fetchData, 1000);
+        fetchData();
+    </script>
+</body>
+</html>
