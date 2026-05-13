@@ -13,6 +13,12 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "simulate-telemetry-every-5-seconds": {
+            "task": "app.workers.tasks.simulate_telemetry_task",
+            "schedule": 5.0,
+        },
+    },
 )
 
 # Auto-discover tasks from the tasks module

@@ -3,7 +3,9 @@ import random
 import httpx
 import sys
 
-API_URL = "http://localhost:8000"
+# Allow passing URL as argument, default to local
+API_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
+print(f"🚀 Starting simulator for: {API_URL}")
 
 def create_patient():
     print("Creating a test patient...")

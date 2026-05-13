@@ -81,3 +81,38 @@ def process_telemetry_task(telemetry_id: int):
         new_loop.run_until_complete(process_telemetry_analysis(telemetry_id))
     else:
         loop.run_until_complete(process_telemetry_analysis(telemetry_id))
+@celery_app.task(name="app.workers.tasks.simulate_telemetry_task")
+def simulate_telemetry_task():
+    """
+    Background task to generate simulated telemetry for demo purposes.
+    """
+    from app.models.models import Telemetry, Patient
+    from app.db.session import AsyncSessionLocal
+    import asyncio
+    import random
+
+    async def _generate():
+        async with AsyncSessionLocal() as db:
+            # We use patient_id=2 for simulation
+            hr = random.randint(65, 145)
+            spo2 = round(random.uniform(92, 100), 1)
+            
+            new_telemetry = Telemetry(
+                patient_id=2,
+                heart_rate=float(hr),
+                spo2=float(spo2)
+            )
+            db.add(new_telemetry)
+            await db.commit()
+            await db.refresh(new_telemetry)
+            
+            # Trigger analysis for this simulated data
+            process_telemetry_task.delay(new_telemetry.id)
+            print(f"SIMULATOR: Generated data for Patient 2: {hr} BPM")
+
+    # Run the async function in the sync Celery worker
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        asyncio.create_task(_generate())
+    else:
+        loop.run_until_complete(_generate())
