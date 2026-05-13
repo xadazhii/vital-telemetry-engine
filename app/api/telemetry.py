@@ -48,29 +48,44 @@ async def get_insights(patient_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/apple-health")
 async def apple_health_adapter(request: Request, db: AsyncSession = Depends(get_db)):
     """
-    Adapter for Apple Health data exported via Webhooks (e.g. Health Auto Export app).
+    Adapter for Apple Health data exported via Webhooks.
+    More robust parsing for different field names and structures.
     """
     try:
         payload = await request.json()
-        # Common structure: { "data": { "metrics": [ { "name": "heart_rate", "data": [...] } ] } }
-        metrics = payload.get("data", {}).get("metrics", [])
+        print(f"DEBUG: FULL PAYLOAD: {payload}")
         
+        # Support both 'data' wrapper and flat structure
+        metrics_container = payload.get("data", payload)
+        metrics = metrics_container.get("metrics", [])
+        
+        if not metrics:
+             print(f"DEBUG: No metrics found in payload: {payload}")
+
         count = 0
         for metric in metrics:
-            if metric.get("name") == "heart_rate":
+            metric_name = metric.get("name", "").lower()
+            # Support 'heart_rate', 'heart rate', etc.
+            if "heart" in metric_name and "rate" in metric_name:
                 for entry in metric.get("data", []):
-                    hr_val = entry.get("qty")
+                    # Support 'qty', 'value', or 'Avg'/'Min'/'Max'
+                    hr_val = entry.get("qty") or entry.get("value") or entry.get("Avg") or entry.get("Min") or entry.get("Max")
                     if hr_val:
+                        # Add telemetry for patient 1 (demo)
                         new_tel = Telemetry(patient_id=1, heart_rate=float(hr_val), spo2=98.0)
                         db.add(new_tel)
                         count += 1
         
         if count > 0:
             await db.commit()
+            await db.refresh(new_tel)
             # Trigger analysis for the last added record
-            # (Note: in production we'd use a background task for each or a batch)
+            process_telemetry_task.delay(new_tel.id)
+            
+            print(f"DEBUG: Successfully processed {count} records and triggered analysis for ID {new_tel.id}")
             return {"status": "success", "records_processed": count}
         
-        return {"status": "no_data_processed"}
+        return {"status": "no_data_processed", "received_keys": list(payload.keys())}
     except Exception as e:
+        print(f"ERROR: Apple Health Adapter failed: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Failed to parse Apple Health data: {str(e)}")

@@ -163,7 +163,13 @@
     <div class="container">
         <header>
             <h1>Cardio Monitoring Dashboard</h1>
-            <div class="badge">LIVE TELEMETRY</div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <select id="patientSelector" style="background: #18181b; color: white; border: 1px solid #27272a; padding: 6px 12px; border-radius: 8px; font-size: 0.875rem; cursor: pointer; outline: none; transition: border-color 0.2s;">
+                    <option value="1">⌚ Real Watch Data (Patient 1)</option>
+                    <option value="2">🤖 Simulator (Patient 2)</option>
+                </select>
+                <div class="badge">LIVE TELEMETRY</div>
+            </div>
         </header>
 
         <div class="grid">
@@ -200,7 +206,17 @@
     </div>
 
     <script>
-        const patientId = 2; // Updated to match current simulation
+        let patientId = document.getElementById('patientSelector').value;
+        
+        document.getElementById('patientSelector').addEventListener('change', (e) => {
+            patientId = e.target.value;
+            // Clear current data to avoid mixing
+            hrChart.data.labels = [];
+            hrChart.data.datasets[0].data = [];
+            hrChart.update();
+            fetchData();
+        });
+
         const ctx = document.getElementById('hrChart').getContext('2d');
         const hrChart = new Chart(ctx, {
             type: 'line',
