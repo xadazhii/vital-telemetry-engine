@@ -53,14 +53,17 @@ async def apple_health_adapter(request: Request, db: AsyncSession = Depends(get_
     """
     try:
         payload = await request.json()
-        print(f"DEBUG: FULL PAYLOAD: {payload}")
+        print(f"DEBUG: RECEIVED PAYLOAD TYPE: {type(payload)}")
         
-        # Support both 'data' wrapper and flat structure
-        metrics_container = payload.get("data", payload)
-        metrics = metrics_container.get("metrics", [])
-        
+        # Extremely robust metrics finding
+        metrics = []
+        if isinstance(payload, dict):
+            metrics = payload.get("data", {}).get("metrics", payload.get("metrics", []))
+        elif isinstance(payload, list):
+            metrics = payload
+
         if not metrics:
-             print(f"DEBUG: No metrics found in payload: {payload}")
+             print(f"DEBUG: No metrics found. Keys in payload: {payload.keys() if isinstance(payload, dict) else 'Payload is list'}")
 
         count = 0
         for metric in metrics:
@@ -77,6 +80,15 @@ async def apple_health_adapter(request: Request, db: AsyncSession = Depends(get_
                         count += 1
         
         if count > 0:
+            # ENSURE PATIENT 1 EXISTS
+            from sqlalchemy import select
+            result = await db.execute(select(Patient).where(Patient.id == 1))
+            if not result.scalar_one_or_none():
+                print("DEBUG: Creating default Patient 1")
+                new_patient = Patient(id=1, name="Kristina (Apple Watch)", age=0, gender="female")
+                db.add(new_patient)
+                await db.flush() # Ensure ID 1 is reserved before telemetry insert
+            
             await db.commit()
             await db.refresh(new_tel)
             # Trigger analysis for the last added record
