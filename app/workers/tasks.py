@@ -93,9 +93,18 @@ def simulate_telemetry_task():
 
     async def _generate():
         async with AsyncSessionLocal() as db:
+            # ENSURE PATIENT 2 EXISTS
+            from sqlalchemy import select
+            patient_check = await db.execute(select(Patient).where(Patient.id == 2))
+            if not patient_check.scalar_one_or_none():
+                print("DEBUG: Creating default Simulator Patient 2")
+                bot = Patient(id=2, name="Demo Simulator (Bot)", age=30, gender="other")
+                db.add(bot)
+                await db.commit()
+
             # We use patient_id=2 for simulation
             hr = random.randint(65, 145)
-            spo2 = round(random.uniform(92, 100), 1)
+            spo2 = round(random.uniform(94, 100), 1)
             
             new_telemetry = Telemetry(
                 patient_id=2,

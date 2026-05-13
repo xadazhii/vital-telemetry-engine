@@ -264,38 +264,63 @@
                     const chartData = telemetry.slice(0, 30).reverse();
                     hrChart.data.labels = chartData.map(d => new Date(d.timestamp).toLocaleTimeString());
                     hrChart.data.datasets[0].data = chartData.map(d => d.heart_rate);
+                    hrChart.options.plugins.tooltip = {
+                        enabled: true,
+                        intersect: false,
+                        mode: 'index',
+                        callbacks: {
+                            label: (ctx) => `Pulse: ${ctx.parsed.y} BPM`
+                        }
+                    };
                     hrChart.update('none');
+                } else {
+                    document.getElementById('heart-rate').innerHTML = `-- <span class="unit">BPM</span>`;
+                    document.getElementById('spo2').innerHTML = `-- <span class="unit">%</span>`;
                 }
 
-                // Fetch Medical Insights (Seerlinq specific)
+                // Fetch Medical Insights
                 const insightResp = await fetch(`/telemetry/insights/${patientId}`);
                 const insight = await insightResp.json();
-                if (insight) {
-                    document.getElementById('stress-index').innerText = insight.stress_index;
-                    document.getElementById('stress-index').style.color = insight.stress_index === 'High Stress' ? '#ef4444' : '#10b981';
+                const stressEl = document.getElementById('stress-index');
+                if (insight && insight.stress_index) {
+                    stressEl.innerText = insight.stress_index;
+                    stressEl.style.color = insight.stress_index === 'High Stress' ? '#ef4444' : '#10b981';
                     document.getElementById('hrv-val').innerText = insight.hrv.toFixed(1);
                     document.getElementById('conf-val').innerText = (insight.confidence_score * 100).toFixed(0);
+                } else {
+                    stressEl.innerText = 'Analyzing...';
                 }
 
-                // Fetch latest alerts
+                // Fetch and filter alerts
                 const alertResponse = await fetch('/alerts/');
                 const alerts = await alertResponse.json();
                 const alertList = document.getElementById('alerts-list');
                 alertList.innerHTML = '';
                 
-                alerts.slice(0, 10).forEach(alert => {
-                    const li = document.createElement('li');
-                    li.className = 'alert-item';
-                    const time = new Date(alert.created_at).toLocaleTimeString();
-                    li.innerHTML = `
-                        <div>
-                            <span class="status-dot"></span>
-                            <span class="alert-type">${alert.type}</span>
+                const filtered = alerts.filter(a => a.patient_id == patientId);
+
+                if (filtered.length === 0) {
+                    alertList.innerHTML = `
+                        <div style="padding: 1rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981;"></div>
+                            <span style="color: #10b981; font-size: 0.875rem;">Status: Normal. All systems healthy.</span>
                         </div>
-                        <span class="alert-time">${time}</span>
                     `;
-                    alertList.appendChild(li);
-                });
+                } else {
+                    filtered.slice(0, 10).forEach(alert => {
+                        const li = document.createElement('li');
+                        li.className = 'alert-item';
+                        const time = new Date(alert.created_at).toLocaleTimeString();
+                        li.innerHTML = `
+                            <div>
+                                <span class="status-dot"></span>
+                                <span class="alert-type">${alert.type}</span>
+                            </div>
+                            <span class="alert-time">${time}</span>
+                        `;
+                        alertList.appendChild(li);
+                    });
+                }
 
             } catch (err) {
                 console.error("Error fetching data:", err);
