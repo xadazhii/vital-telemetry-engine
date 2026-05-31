@@ -1,31 +1,44 @@
-# Python
+# ── Python ──────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
 .env
-.venv
+.env.*
+.venv/
 env/
 venv/
 ENV/
-*.db
-*.sqlite
 
-# IDE
-.idea/
-.vscode/
-
-# macOS
-.DS_Store
-
-# Test artifacts
-test_db.sqlite
+# ── Test artifacts ───────────────────────────────
 .pytest_cache/
+test_db.sqlite
+*.sqlite
+*.db
 
-# Xcode / iOS
+# ── macOS ────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Xcode / iOS ──────────────────────────────────
+ios/**/*.xcuserstate
 ios/CardioWatch.xcodeproj/xcuserdata/
 ios/CardioWatch.xcodeproj/project.xcworkspace/xcuserdata/
-ios/CardioWatch/Assets.xcassets/**/*.appiconset/*.png
-ios/**/*.xcuserstate
 ios/build/
 ios/DerivedData/
 ios/**/__preview__/
+ios/**/*.orig
+
+# ── IDE ───────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Logs / tmp ───────────────────────────────────
+*.log
+fwd1
+/tmp/
