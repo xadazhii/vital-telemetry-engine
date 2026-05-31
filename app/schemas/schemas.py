@@ -90,8 +90,6 @@ class MedicalInsightResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── Physician / Auth ──────────────────────────────────────────
-
 class PhysicianCreate(BaseModel):
     name: str
     specialty: Optional[str] = None

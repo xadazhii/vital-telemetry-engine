@@ -39,8 +39,8 @@ class Alert(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
-    type = Column(String)  # e.g., "tachycardia", "low oxygen"
-    severity = Column(String) # e.g., "high", "medium"
+    type = Column(String)
+    severity = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class MedicalInsight(Base):
@@ -48,9 +48,9 @@ class MedicalInsight(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
-    hrv = Column(Float)           # RMSSD ms
-    sdnn = Column(Float)          # SDNN ms
-    pnn50 = Column(Float)         # % of successive diffs > 50ms
+    hrv = Column(Float)
+    sdnn = Column(Float)
+    pnn50 = Column(Float)
     stress_index = Column(String)
     confidence_score = Column(Float)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

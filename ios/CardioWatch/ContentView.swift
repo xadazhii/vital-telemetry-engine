@@ -3,8 +3,6 @@ import HealthKit
 import CoreLocation
 import Combine
 
-// MARK: - Design System
-
 extension Color {
     static let appBg        = Color(r: 7,   g: 7,   b: 16)
     static let cardBg       = Color(r: 15,  g: 15,  b: 26)
@@ -21,8 +19,6 @@ extension Color {
     }
 }
 
-// MARK: - Reusable card container
-
 struct CardView<Content: View>: View {
     let content: Content
     init(@ViewBuilder content: () -> Content) { self.content = content() }
@@ -34,8 +30,6 @@ struct CardView<Content: View>: View {
             .cornerRadius(16)
     }
 }
-
-// MARK: - Metric tile
 
 struct MetricTile: View {
     let label: String
@@ -78,8 +72,6 @@ struct MetricTile: View {
     }
 }
 
-// MARK: - Action button
-
 struct ActionButton: View {
     let title: String
     let icon: String
@@ -115,8 +107,6 @@ struct ActionButton: View {
     }
 }
 
-// MARK: - Dark text field
-
 struct DarkField: View {
     let placeholder: String
     @Binding var text: String
@@ -136,8 +126,6 @@ struct DarkField: View {
             .disableAutocorrection(true)
     }
 }
-
-// MARK: - ViewModel
 
 class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var lastSystolic: Double = 0.0
@@ -171,8 +159,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
         locationManager.requestWhenInUseAuthorization()
         requestHealthKitAuthorization()
     }
-
-    // MARK: - Air Quality
 
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         if status == .authorizedWhenInUse || status == .authorizedAlways {
@@ -275,7 +261,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
 
-    // Watches all health types; debounces 2s so rapid updates send one request
     private func setupObservers() {
         let types: [HKSampleType] = [
             HKQuantityType.quantityType(forIdentifier: .heartRate)!,
@@ -287,7 +272,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
         ]
 
         for type in types {
-            // Enable background delivery so the app wakes even when closed
             healthStore.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
 
             let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completion, error in
@@ -300,7 +284,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
 
-    // Waits 2 seconds after the last update before fetching & sending
     private func scheduleDebouncedSync() {
         syncWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -324,7 +307,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
         let q = HKSampleQuery(sampleType: t, predicate: nil, limit: 1,
                               sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]) { _, r, _ in
             if let s = r?.first as? HKQuantitySample {
-                // HealthKit stores SpO2 as 0.0–1.0 fraction
                 let pct = s.quantity.doubleValue(for: HKUnit.percent()) * 100
                 DispatchQueue.main.async { self.lastSpo2 = pct }
             }
@@ -337,7 +319,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
         let q = HKSampleQuery(sampleType: t, predicate: nil, limit: 1,
                               sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]) { _, r, _ in
             if let s = r?.first as? HKQuantitySample {
-                // Apple stores HRV as SDNN in milliseconds
                 let hrv = s.quantity.doubleValue(for: HKUnit.secondUnit(with: .milli))
                 DispatchQueue.main.async { self.lastHRV = hrv }
             }
@@ -459,8 +440,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
             "name": name, "age": userAge, "height": userHeight, "weight": userWeight,
             "systolic": lastSystolic, "diastolic": lastDiastolic, "heart_rate": lastHeartRate
         ]
-        // Only send SpO2 if device actually measured it (Series 6+ only)
-        // SE / Series 4-5 don't have the sensor — omit rather than send fake 98.0
         if lastSpo2 > 0 { payload["spo2"] = lastSpo2 }
         if lastHRV > 0 { payload["device_hrv"] = lastHRV }
         if airQualityIndex > 0 {
@@ -484,8 +463,6 @@ class PhoneConnector: NSObject, ObservableObject, CLLocationManagerDelegate {
         }.resume()
     }
 }
-
-// MARK: - Compact metric tile (3-column row)
 
 struct CompactTile: View {
     let label: String
@@ -521,8 +498,6 @@ struct CompactTile: View {
     }
 }
 
-// MARK: - Minimal profile stat
-
 struct ProfileMini: View {
     let label: String
     let value: String
@@ -539,8 +514,6 @@ struct ProfileMini: View {
     }
 }
 
-// MARK: - Main View
-
 struct ContentView: View {
     @StateObject private var connector = PhoneConnector()
     @State private var heartPulse = false
@@ -552,7 +525,6 @@ struct ContentView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 14) {
 
-                    // ── Header ──────────────────────────────────
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Cardio Live")
@@ -568,7 +540,6 @@ struct ContentView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
 
-                    // ── Hero: Heart Rate ─────────────────────────
                     CardView {
                         HStack(alignment: .center) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -601,7 +572,6 @@ struct ContentView: View {
                                 }
                             }
                             Spacer()
-                            // Heartbeat ring
                             ZStack {
                                 Circle()
                                     .stroke(Color.accent.opacity(0.12), lineWidth: 3)
@@ -621,7 +591,6 @@ struct ContentView: View {
                     .padding(.horizontal, 20)
                     .onAppear { heartPulse = true }
 
-                    // ── Secondary metrics row ────────────────────
                     HStack(spacing: 10) {
                         CompactTile(
                             label: "Blood Pressure",
@@ -647,7 +616,6 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
 
-                    // ── Profile strip ────────────────────────────
                     if connector.userAge > 0 || connector.userHeight > 0 {
                         CardView {
                             HStack {
@@ -670,7 +638,6 @@ struct ContentView: View {
                         .padding(.horizontal, 20)
                     }
 
-                    // ── Actions ──────────────────────────────────
                     VStack(spacing: 8) {
                         ActionButton(title: "Sync Now", icon: "arrow.up.heart.fill", color: .accent) {
                             connector.fetchAllHealthData()
@@ -689,7 +656,6 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
 
-                    // ── Settings ─────────────────────────────────
                     CardView {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Settings")
@@ -719,7 +685,6 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
 
-                    // ── Status bar ───────────────────────────────
                     StatusBar(message: connector.serverStatus, ok: connector.statusOK)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 24)
@@ -729,8 +694,6 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
     }
 }
-
-// MARK: - Small components
 
 struct LiveBadge: View {
     let ok: Bool

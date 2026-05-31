@@ -3,7 +3,6 @@ import random
 import httpx
 import sys
 
-# Allow passing URL as argument, default to local
 API_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
 print(f"🚀 Starting simulator for: {API_URL}")
 
@@ -26,26 +25,24 @@ def create_patient():
 def simulate():
     patient_id = create_patient()
     print("Starting telemetry simulation. Press Ctrl+C to stop.")
-    
+
     while True:
-        # Generate random heart rate (occasionally > 130 for tachycardia)
         heart_rate = random.randint(60, 150)
-        # Generate random SpO2 (occasionally < 92 for low oxygen)
         spo2 = random.uniform(88, 100)
-        
+
         telemetry_data = {
             "patient_id": patient_id,
             "heart_rate": float(heart_rate),
             "spo2": float(round(spo2, 1))
         }
-        
+
         try:
             response = httpx.post(f"{API_URL}/telemetry/", json=telemetry_data)
             response.raise_for_status()
             print(f"Sent Telemetry: Patient={patient_id}, Pulse={heart_rate}, SpO2={telemetry_data['spo2']}%")
         except Exception as e:
             print(f"Error sending telemetry: {e}")
-            
+
         time.sleep(2)
 
 if __name__ == "__main__":

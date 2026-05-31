@@ -20,19 +20,17 @@ router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
 @router.post("/", response_model=TelemetryResponse)
 async def create_telemetry(telemetry: TelemetryCreate, db: AsyncSession = Depends(get_db)):
-    # Check if patient exists
     patient_result = await db.execute(select(Patient).where(Patient.id == telemetry.patient_id))
     if not patient_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
     db_telemetry = Telemetry(**telemetry.model_dump())
     db.add(db_telemetry)
     await db.commit()
     await db.refresh(db_telemetry)
-    
-    # Trigger async processing
+
     process_telemetry_task.delay(db_telemetry.id)
-    
+
     return db_telemetry
 
 @router.get("/{patient_id}", response_model=List[TelemetryResponse])
@@ -76,7 +74,6 @@ async def apple_health_adapter(request: Request, db: AsyncSession = Depends(get_
         patient_name = (payload.get("name") or "").strip() or "Apple Watch User"
         logger.info(f"Received Apple Health payload, name='{patient_name}'")
 
-        # Ensure patient 1 exists; update name if it changed
         patient_check = await db.execute(select(Patient).where(Patient.id == 1))
         existing = patient_check.scalar_one_or_none()
         if not existing:
@@ -86,8 +83,7 @@ async def apple_health_adapter(request: Request, db: AsyncSession = Depends(get_
         elif existing.name != patient_name:
             existing.name = patient_name
             await db.commit()
-        
-        # Створюємо новий запис телеметрії
+
         new_tel = Telemetry(
             patient_id=1,
             heart_rate=float(payload.get("heart_rate", 0.0)),
@@ -98,14 +94,13 @@ async def apple_health_adapter(request: Request, db: AsyncSession = Depends(get_
             systolic=payload.get("systolic"),
             diastolic=payload.get("diastolic")
         )
-        
+
         db.add(new_tel)
         await db.commit()
         await db.refresh(new_tel)
-        
-        # Запускаємо Celery воркер для аналізу
+
         process_telemetry_task.delay(new_tel.id)
-        
+
         return {"status": "success", "processed_id": new_tel.id}
     except Exception as e:
         logger.error(f"Apple Health Adapter failed: {str(e)}")
@@ -126,7 +121,6 @@ async def history_import(request: Request, db: AsyncSession = Depends(get_db)):
         if not readings:
             return {"status": "success", "imported": 0}
 
-        # Ensure patient 1 exists
         patient_check = await db.execute(select(Patient).where(Patient.id == 1))
         existing = patient_check.scalar_one_or_none()
         if not existing:
@@ -136,7 +130,6 @@ async def history_import(request: Request, db: AsyncSession = Depends(get_db)):
             existing.name = patient_name
             await db.commit()
 
-        # Fetch existing timestamps to avoid duplicates
         existing_ts_result = await db.execute(
             select(Telemetry.timestamp).where(Telemetry.patient_id == 1)
         )
@@ -160,7 +153,6 @@ async def history_import(request: Request, db: AsyncSession = Depends(get_db)):
 
         await db.commit()
 
-        # Run analysis on the most recent imported record
         if imported > 0:
             latest = await db.execute(
                 select(Telemetry)
@@ -182,11 +174,11 @@ async def history_import(request: Request, db: AsyncSession = Depends(get_db)):
 @router.websocket("/ws/{patient_id}")
 async def websocket_endpoint(websocket: WebSocket, patient_id: int):
     await websocket.accept()
-    
+
     async def listen_to_client(ws: WebSocket):
         try:
             while True:
-                await ws.receive_text()  # Keep connection alive / detect client disconnect
+                await ws.receive_text()
         except WebSocketDisconnect:
             raise
 

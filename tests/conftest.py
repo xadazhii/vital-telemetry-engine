@@ -4,6 +4,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from app.db.session import Base, get_db
+from app.core.security import get_current_physician
 from app.main import app
 from app.models.models import Patient, Telemetry, Alert, MedicalInsight, Physician
 
@@ -56,7 +57,13 @@ async def client(db):
                 await session.rollback()
                 raise
 
+    mock_physician = Physician(id=1, name="Test Doctor", email="test@test.com")
+
+    async def override_auth():
+        return mock_physician
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_physician] = override_auth
     from httpx import AsyncClient, ASGITransport
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac

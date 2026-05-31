@@ -1,10 +1,3 @@
-//
-//  CardioWatchApp.swift
-//  CardioWatch
-//
-//  Created by m on 30.05.2026.
-//
-
 import SwiftUI
 
 @main
