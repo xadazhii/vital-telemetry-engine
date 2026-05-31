@@ -7,6 +7,8 @@ class Physician(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     specialty = Column(String)
+    email = Column(String, unique=True, nullable=True)
+    hashed_password = Column(String, nullable=True)
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -24,7 +26,12 @@ class Telemetry(Base):
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
     heart_rate = Column(Float)
-    spo2 = Column(Float)
+    spo2 = Column(Float, nullable=True)
+    age = Column(Integer, nullable=True)
+    height = Column(Float, nullable=True)
+    weight = Column(Float, nullable=True)
+    systolic = Column(Float, nullable=True)
+    diastolic = Column(Float, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
 class Alert(Base):
@@ -41,7 +48,9 @@ class MedicalInsight(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
-    hrv = Column(Float)
+    hrv = Column(Float)           # RMSSD ms
+    sdnn = Column(Float)          # SDNN ms
+    pnn50 = Column(Float)         # % of successive diffs > 50ms
     stress_index = Column(String)
     confidence_score = Column(Float)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

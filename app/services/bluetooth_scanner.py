@@ -33,9 +33,12 @@ class MedicalBLEService:
         Handle incoming data from the medical device.
         Medical data is usually sent as byte arrays that need decoding.
         """
+        if len(data) < 2:
+            logger.warning(f"BLE packet too short ({len(data)} bytes), skipping")
+            return
         # Simplified decoding of Heart Rate (per Bluetooth SIG specs)
-        hr_val = data[1] 
-        print(f"Мед-дані отримано через Bluetooth: Pulse = {hr_val}")
+        hr_val = data[1]
+        logger.info(f"BLE heart rate received: {hr_val} BPM")
         # Тут ми б відправляли ці дані в наш API через httpx.post
 
     async def connect_and_monitor(self, address: str):

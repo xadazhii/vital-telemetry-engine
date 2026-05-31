@@ -9,3 +9,12 @@ httpx==0.27.0
 python-multipart==0.0.9
 numpy==1.26.4
 psycopg2-binary==2.9.9
+alembic==1.13.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+logfire[fastapi,sqlalchemy]==0.50.0
+
+# Testing
+pytest==8.1.1
+pytest-asyncio==0.23.6
+aiosqlite==0.20.0

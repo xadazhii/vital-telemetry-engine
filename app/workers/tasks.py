@@ -2,10 +2,12 @@ import asyncio
 import logging
 import json
 from datetime import datetime
+import redis.asyncio as aioredis
 from app.workers.celery_app import celery_app
 from app.db.session import AsyncSessionLocal
 from app.models.models import Telemetry, Alert, MedicalInsight
 from app.services.analysis import MedicalAnalysisService
+from app.core.config import settings
 from sqlalchemy import select
 
 # Configure structured logging
@@ -44,43 +46,151 @@ async def process_telemetry_analysis(telemetry_id: int):
         hr_list = [h.heart_rate for h in history]
 
         # 1. Basic Anomaly Detection (Alerts)
+        alerts_added = []
+        
+        # Перевірка пульсу (тахікардія / брадикардія)
         if telemetry.heart_rate > 130:
             log_event("anomaly_detected", {"patient_id": telemetry.patient_id, "type": "tachycardia", "val": telemetry.heart_rate}, level="warning")
-            session.add(Alert(patient_id=telemetry.patient_id, type="tachycardia", severity="high"))
+            alert = Alert(patient_id=telemetry.patient_id, type="tachycardia", severity="high")
+            session.add(alert)
+            alerts_added.append(alert)
+        elif telemetry.heart_rate > 0 and telemetry.heart_rate < 50:
+            log_event("anomaly_detected", {"patient_id": telemetry.patient_id, "type": "bradycardia", "val": telemetry.heart_rate}, level="warning")
+            alert = Alert(patient_id=telemetry.patient_id, type="bradycardia", severity="medium")
+            session.add(alert)
+            alerts_added.append(alert)
 
+        # Перевірка кисню
         if telemetry.spo2 < 92:
             log_event("anomaly_detected", {"patient_id": telemetry.patient_id, "type": "low_oxygen", "val": telemetry.spo2}, level="warning")
-            session.add(Alert(patient_id=telemetry.patient_id, type="low oxygen saturation", severity="high"))
+            alert = Alert(patient_id=telemetry.patient_id, type="low oxygen saturation", severity="high")
+            session.add(alert)
+            alerts_added.append(alert)
+
+        # Перевірка тиску (якщо переданий)
+        if telemetry.systolic and telemetry.diastolic:
+            systolic = telemetry.systolic
+            diastolic = telemetry.diastolic
+            if systolic >= 140 or diastolic >= 90:
+                log_event("anomaly_detected", {"patient_id": telemetry.patient_id, "type": "hypertension", "systolic": systolic, "diastolic": diastolic}, level="warning")
+                alert = Alert(patient_id=telemetry.patient_id, type=f"Hypertension ({int(systolic)}/{int(diastolic)})", severity="high")
+                session.add(alert)
+                alerts_added.append(alert)
+            elif systolic <= 90 or diastolic <= 60:
+                log_event("anomaly_detected", {"patient_id": telemetry.patient_id, "type": "hypotension", "systolic": systolic, "diastolic": diastolic}, level="warning")
+                alert = Alert(patient_id=telemetry.patient_id, type=f"Hypotension ({int(systolic)}/{int(diastolic)})", severity="medium")
+                session.add(alert)
+                alerts_added.append(alert)
 
         # 2. Advanced Signal Processing (Medical Insights)
-        hrv = MedicalAnalysisService.calculate_hrv(hr_list)
+        hrv = MedicalAnalysisService.calculate_hrv(hr_list)          # RMSSD
+        sdnn = MedicalAnalysisService.calculate_sdnn(hr_list)
+        pnn50 = MedicalAnalysisService.calculate_pnn50(hr_list)
         stress = MedicalAnalysisService.calculate_stress_index(hrv)
-        confidence = MedicalAnalysisService.detect_signal_noise(hr_list)
+        confidence = MedicalAnalysisService.calculate_snr(hr_list)
+
+        # Розрахунок ІМТ та формування персоналізованого висновку
+        bmi_status = ""
+        bmi = 0.0
+        if telemetry.weight and telemetry.height and telemetry.height > 0:
+            height_m = telemetry.height / 100.0
+            bmi = telemetry.weight / (height_m * height_m)
+            if bmi < 18.5: bmi_status = "Underweight"
+            elif bmi < 25: bmi_status = "Normal weight"
+            elif bmi < 30: bmi_status = "Overweight"
+            else: bmi_status = "Obese"
+
+        # Формуємо текстовий висновок на основі всіх параметрів
+        analysis_parts = []
+        if bmi_status:
+            analysis_parts.append(f"BMI: {bmi:.1f} ({bmi_status}).")
+        
+        if telemetry.systolic and telemetry.diastolic:
+            bp_val = f"{int(telemetry.systolic)}/{int(telemetry.diastolic)}"
+            if telemetry.systolic >= 140 or telemetry.diastolic >= 90:
+                analysis_parts.append(f"Blood pressure {bp_val} is HIGH (hypertension limit reached).")
+            elif telemetry.systolic <= 90 or telemetry.diastolic <= 60:
+                analysis_parts.append(f"Blood pressure {bp_val} is LOW.")
+            else:
+                analysis_parts.append(f"Blood pressure {bp_val} is Normal.")
+                
+        if stress == "High Stress":
+            analysis_parts.append("Elevated stress index detected. Relaxation is recommended.")
+        else:
+            analysis_parts.append("Cardiac stress index is Normal.")
+
+        insight_text = " ".join(analysis_parts) if analysis_parts else "Cardiac rhythm and health indicators are stable."
 
         insight = MedicalInsight(
             patient_id=telemetry.patient_id,
-            hrv=hrv,
+            hrv=round(hrv, 2),
+            sdnn=round(sdnn, 2),
+            pnn50=round(pnn50, 2),
             stress_index=stress,
-            confidence_score=confidence
+            confidence_score=round(confidence, 3)
         )
         session.add(insight)
         
         await session.commit()
+
+        # Refresh models to populate autogenerated DB fields (like timestamps)
+        try:
+            await session.refresh(telemetry)
+            for alert in alerts_added:
+                await session.refresh(alert)
+        except Exception as e:
+            log_event("db_refresh_failed", {"error": str(e)}, level="warning")
+
         log_event("analysis_complete", {
-            "patient_id": telemetry.patient_id, 
-            "hrv": round(hrv, 2), 
+            "patient_id": telemetry.patient_id,
+            "rmssd": round(hrv, 2),
+            "sdnn": round(sdnn, 2),
+            "pnn50": round(pnn50, 2),
             "stress": stress,
-            "confidence": confidence
+            "snr": round(confidence, 3)
         })
+
+        # 3. Publish to Redis Pub/Sub for WebSockets
+        try:
+            redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            
+            payload = {
+                "event": "telemetry_update",
+                "patient_id": telemetry.patient_id,
+                "telemetry": {
+                    "heart_rate": telemetry.heart_rate,
+                    "spo2": telemetry.spo2,
+                    "systolic": telemetry.systolic,
+                    "diastolic": telemetry.diastolic,
+                    "age": telemetry.age,
+                    "height": telemetry.height,
+                    "weight": telemetry.weight,
+                    "timestamp": telemetry.timestamp.isoformat() if telemetry.timestamp else datetime.utcnow().isoformat()
+                },
+                "insight": {
+                    "hrv": round(hrv, 2),
+                    "stress_index": stress,
+                    "analysis_text": insight_text,
+                    "confidence_score": confidence
+                },
+                "alerts": [
+                    {
+                        "type": a.type,
+                        "severity": a.severity,
+                        "created_at": a.created_at.isoformat() if a.created_at else datetime.utcnow().isoformat()
+                    }
+                    for a in alerts_added
+                ]
+            }
+            
+            await redis_client.publish(f"patient:{telemetry.patient_id}", json.dumps(payload))
+            await redis_client.aclose()
+        except Exception as e:
+            log_event("redis_publish_failed", {"error": str(e)}, level="error")
 
 @celery_app.task(name="app.workers.tasks.process_telemetry_task")
 def process_telemetry_task(telemetry_id: int):
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        new_loop = asyncio.new_event_loop()
-        new_loop.run_until_complete(process_telemetry_analysis(telemetry_id))
-    else:
-        loop.run_until_complete(process_telemetry_analysis(telemetry_id))
+    asyncio.run(process_telemetry_analysis(telemetry_id))
 @celery_app.task(name="app.workers.tasks.simulate_telemetry_task")
 def simulate_telemetry_task():
     """
@@ -88,24 +198,20 @@ def simulate_telemetry_task():
     """
     from app.models.models import Telemetry, Patient
     from app.db.session import AsyncSessionLocal
-    import asyncio
     import random
 
     async def _generate():
         async with AsyncSessionLocal() as db:
-            # ENSURE PATIENT 2 EXISTS
             from sqlalchemy import select
             patient_check = await db.execute(select(Patient).where(Patient.id == 2))
             if not patient_check.scalar_one_or_none():
-                print("DEBUG: Creating default Simulator Patient 2")
                 bot = Patient(id=2, name="Demo Simulator (Bot)", age=30, gender="other")
                 db.add(bot)
                 await db.commit()
 
-            # We use patient_id=2 for simulation
             hr = random.randint(65, 145)
             spo2 = round(random.uniform(94, 100), 1)
-            
+
             new_telemetry = Telemetry(
                 patient_id=2,
                 heart_rate=float(hr),
@@ -114,14 +220,8 @@ def simulate_telemetry_task():
             db.add(new_telemetry)
             await db.commit()
             await db.refresh(new_telemetry)
-            
-            # Trigger analysis for this simulated data
-            process_telemetry_task.delay(new_telemetry.id)
-            print(f"SIMULATOR: Generated data for Patient 2: {hr} BPM")
 
-    # Run the async function in the sync Celery worker
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        asyncio.create_task(_generate())
-    else:
-        loop.run_until_complete(_generate())
+            process_telemetry_task.delay(new_telemetry.id)
+            log_event("simulator_generated", {"patient_id": 2, "heart_rate": hr, "spo2": spo2})
+
+    asyncio.run(_generate())
