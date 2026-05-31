@@ -3,12 +3,21 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyo
-.env
-.env.*
 .venv/
 env/
 venv/
 ENV/
+
+# ── Environment & secrets ────────────────────────
+.env
+.env.local
+.env.production
+.env.staging
+secrets.json
+credentials.json
+*.pem
+*.key
+*.p12
 
 # ── Test artifacts ───────────────────────────────
 .pytest_cache/
@@ -30,7 +39,6 @@ ios/CardioWatch.xcodeproj/project.xcworkspace/xcuserdata/
 ios/build/
 ios/DerivedData/
 ios/**/__preview__/
-ios/**/*.orig
 
 # ── IDE ───────────────────────────────────────────
 .idea/
@@ -41,4 +49,3 @@ ios/**/*.orig
 # ── Logs / tmp ───────────────────────────────────
 *.log
 fwd1
-/tmp/
